@@ -1,7 +1,120 @@
-# ADL 1.0 example (placeholder)
-# This file will demonstrate:
+# ADL 1.0 example: "Hello, contract"
+#
+# This is a minimal-but-complete example that demonstrates:
 # - provider
 # - agent with structured prompt sections
-# - task with output contract
+# - task with an explicit output contract
 # - workflow step with save_as
-# - run binding inputs
+# - run binding concrete inputs
+#
+# NOTE: The exact YAML shape is illustrative while the ADL 1.0 spec is still draft.
+# Runtimes may adopt a slightly different schema, but the *concepts* should map 1:1.
+
+adl:
+  version: "1.0-draft"
+
+providers:
+  - id: openai_default
+    kind: openai_compatible
+    model: gpt-4.1-mini
+    params:
+      temperature: 0.2
+      max_output_tokens: 300
+
+tools:
+  - id: now
+    kind: builtin
+    description: Return the current time as an ISO-8601 string.
+    # Tool contracts can be future-typed; for now we keep it minimal.
+    input:
+      profile: json
+      schema:
+        type: object
+        additionalProperties: false
+    output:
+      profile: json
+      schema:
+        type: object
+        required: ["iso8601"]
+        properties:
+          iso8601: { type: string }
+
+agents:
+  - id: greeter
+    provider: openai_default
+    tools_allowed: [now]
+
+    # Structured prompt sections. A runtime MUST assemble these deterministically.
+    prompt:
+      system: |
+        You are a careful assistant.
+        Follow the output contract exactly.
+
+      developer: |
+        ADL demo agent. Prefer concise output.
+
+      instructions: |
+        Create a greeting for the user.
+        Use the user's name and include a short reason.
+
+      examples:
+        - input:
+            name: "Ada"
+            reason: "welcoming you to ADL"
+          output:
+            greeting: "Hello Ada"
+            reason: "welcoming you to ADL"
+
+tasks:
+  - id: make_greeting
+    agent: greeter
+
+    inputs:
+      name:
+        required: true
+        constraints:
+          min_length: 1
+      reason:
+        required: true
+        constraints:
+          min_length: 1
+
+    # Output contract: the runtime enforces this via guards.
+    # If the model output fails, the runtime may attempt bounded repair.
+    output:
+      profile: json
+      schema:
+        type: object
+        additionalProperties: false
+        required: ["greeting", "reason"]
+        properties:
+          greeting:
+            type: string
+            description: 'A short greeting like "Hello Daniel".'
+          reason:
+            type: string
+            description: "A short reason phrase; do not add extra fields."
+
+    # Optional repair policy (runtime-defined semantics).
+    repair:
+      max_attempts: 2
+      strategy: "reformat_with_error"
+
+workflows:
+  - id: hello_workflow
+    steps:
+      - id: step_greeting
+        task: make_greeting
+        with:
+          name: "${inputs.name}"
+          reason: "${inputs.reason}"
+        save_as: greeting
+
+runs:
+  - id: hello_daniel
+    workflow: hello_workflow
+    inputs:
+      name: "Daniel"
+      reason: "welcoming you to the Agent Design Language spec repo"
+    hints:
+      tracing: true
