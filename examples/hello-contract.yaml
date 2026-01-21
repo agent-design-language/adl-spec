@@ -1,0 +1,7 @@
+# ADL 1.0 example (placeholder)
+# This file will demonstrate:
+# - provider
+# - agent with structured prompt sections
+# - task with output contract
+# - workflow step with save_as
+# - run binding inputs
