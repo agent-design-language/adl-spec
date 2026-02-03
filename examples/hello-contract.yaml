@@ -1,120 +1,54 @@
-# ADL 1.0 example: "Hello, contract"
+# ADL v0.1 example: "Hello (contracts deferred)"
 #
-# This is a minimal-but-complete example that demonstrates:
+# This is a minimal runnable example for the swarm v0.1 runtime.
+# It demonstrates:
 # - provider
-# - agent with structured prompt sections
-# - task with an explicit output contract
-# - workflow step with save_as
-# - run binding concrete inputs
+# - agent
+# - task prompt
+# - sequential workflow execution
 #
-# NOTE: The exact YAML shape is illustrative while the ADL 1.0 spec is still draft.
-# Runtimes may adopt a slightly different schema, but the *concepts* should map 1:1.
+# NOTE: Output contracts are a v0.2+ feature; for v0.1 we document intent in comments.
 
-adl:
-  version: "1.0-draft"
+version: "0.1"
 
 providers:
-  - id: openai_default
-    kind: openai_compatible
-    model: gpt-4.1-mini
-    params:
+  ollama_local:
+    type: "ollama"
+    base_url: "http://localhost:11434"
+    config:
+      model: "gemma3:latest"
       temperature: 0.2
-      max_output_tokens: 300
-
-tools:
-  - id: now
-    kind: builtin
-    description: Return the current time as an ISO-8601 string.
-    # Tool contracts can be future-typed; for now we keep it minimal.
-    input:
-      profile: json
-      schema:
-        type: object
-        additionalProperties: false
-    output:
-      profile: json
-      schema:
-        type: object
-        required: ["iso8601"]
-        properties:
-          iso8601: { type: string }
 
 agents:
-  - id: greeter
-    provider: openai_default
-    tools_allowed: [now]
-
-    # Structured prompt sections. A runtime MUST assemble these deterministically.
+  greeter:
+    provider: "ollama_local"
+    model: "gemma3:latest"
+    description: "A minimal agent that produces structured, constrained output."
     prompt:
-      system: |
-        You are a careful assistant.
-        Follow the output contract exactly.
-
+      system: "You are a precise assistant."
       developer: |
-        ADL demo agent. Prefer concise output.
-
-      instructions: |
-        Create a greeting for the user.
-        Use the user's name and include a short reason.
-
-      examples:
-        - input:
-            name: "Ada"
-            reason: "welcoming you to ADL"
-          output:
-            greeting: "Hello Ada"
-            reason: "welcoming you to ADL"
+        Follow these rules:
+        - Output ONLY the final answer (no preamble).
+        - Use exactly 1 sentence.
+        - Keep it friendly and short.
 
 tasks:
-  - id: make_greeting
-    agent: greeter
+  hello_contract:
+    description: |
+      v0.1 note: This task is intended to demonstrate output constraints.
+      v0.2+ will add explicit machine-checkable contracts.
+    prompt:
+      user: |
+        Say hello to {{name}}.
+      output: "text"
 
-    inputs:
-      name:
-        required: true
-        constraints:
-          min_length: 1
-      reason:
-        required: true
-        constraints:
-          min_length: 1
-
-    # Output contract: the runtime enforces this via guards.
-    # If the model output fails, the runtime may attempt bounded repair.
-    output:
-      profile: json
-      schema:
-        type: object
-        additionalProperties: false
-        required: ["greeting", "reason"]
-        properties:
-          greeting:
-            type: string
-            description: 'A short greeting like "Hello Daniel".'
-          reason:
-            type: string
-            description: "A short reason phrase; do not add extra fields."
-
-    # Optional repair policy (runtime-defined semantics).
-    repair:
-      max_attempts: 2
-      strategy: "reformat_with_error"
-
-workflows:
-  - id: hello_workflow
+run:
+  name: "hello-contract"
+  workflow:
+    kind: "sequential"
     steps:
-      - id: step_greeting
-        task: make_greeting
-        with:
-          name: "${inputs.name}"
-          reason: "${inputs.reason}"
-        save_as: greeting
-
-runs:
-  - id: hello_daniel
-    workflow: hello_workflow
-    inputs:
-      name: "Daniel"
-      reason: "welcoming you to the Agent Design Language spec repo"
-    hints:
-      tracing: true
+      - id: "hello"
+        agent: "greeter"
+        task: "hello_contract"
+        inputs:
+          name: "Daniel"
